@@ -1,0 +1,30 @@
+FROM kalilinux/kali-rolling:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Wipe existing mirror files and pin directly to Cloudflare's global CDN
+RUN rm -rf /etc/apt/sources.list.d/* && \
+    echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        openssh-server \
+        sudo \
+        iputils-ping \
+        curl \
+        net-tools \
+        python3 \
+        python3-pip \
+        nmap && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH
+RUN mkdir -p /run/sshd /var/run/sshd && \
+    ssh-keygen -A && \
+    echo 'root:kalilab' | chpasswd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' /etc/pam.d/sshd
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D", "-e"]
