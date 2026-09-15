@@ -1,0 +1,68 @@
+networks:
+  ot_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.10.0/24
+
+services:
+  openplc:
+    build:
+      context: https://github.com/thiagoralves/OpenPLC_v3.git#master
+      dockerfile: Dockerfile
+    container_name: openplc_runtime
+    networks:
+      ot_net:
+        ipv4_address: 192.168.10.10
+    ports:
+      - "8080:8080"
+      - "502:502"
+    restart: unless-stopped
+
+  fuxa:
+    image: frangoteam/fuxa:latest
+    container_name: fuxa_scada
+    networks:
+      ot_net:
+        ipv4_address: 192.168.10.20
+    ports:
+      - "1881:1881"
+    restart: unless-stopped
+
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: suricata_nids
+    network_mode: "service:openplc"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./suricata/rules:/var/lib/suricata/rules
+      - ./suricata/logs:/var/log/suricata
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml
+    command: -i eth0 -k none -c /etc/suricata/suricata.yaml -S /var/lib/suricata/rules/modbus.rules
+    depends_on:
+      - openplc
+    restart: unless-stopped
+
+  evebox:
+    image: jasonish/evebox:latest
+    container_name: evebox_ui
+    ports:
+      - "5636:5636"
+    volumes:
+      - ./suricata/logs:/var/log/suricata:ro
+    command: evebox server --datastore sqlite --input /var/log/suricata/eve.json --no-auth --host 0.0.0.0
+    restart: unless-stopped
+
+  kali:
+    build:
+      context: .
+      dockerfile: Dockerfile.kali
+    container_name: kali_node
+    networks:
+      - ot_net
+    ports:
+      - "3333:22"
+    restart: unless-stopped
